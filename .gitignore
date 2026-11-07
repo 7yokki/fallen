@@ -1,3 +1,4 @@
 /target
 *.s
 *.o
+agent.md
