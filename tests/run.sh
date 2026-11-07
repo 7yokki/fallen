@@ -34,6 +34,33 @@ out=$("$TMP/abi")
 [ "$out" = $'neg-ok\nchar=-56' ] || { echo "abi FAIL: $out"; exit 1; }
 echo "ok abi"
 
+$F build tests/globals.flen -o "$TMP/globals" >/dev/null
+out=$("$TMP/globals")
+[ "$out" = "2 0 XY 10 20" ] || { echo "globals FAIL: $out"; exit 1; }
+echo "ok globals"
+
+$F build tests/types.flen -o "$TMP/types" >/dev/null
+out=$("$TMP/types")
+[ "$out" = $'4000000000 -5 8 1\n9223372036854775807 4294967295 65' ] || { echo "types FAIL: $out"; exit 1; }
+echo "ok types"
+
+$F build tests/multidecl.flen -o "$TMP/multidecl" >/dev/null
+out=$("$TMP/multidecl")
+[ "$out" = "1 2 35 7" ] || { echo "multidecl FAIL: $out"; exit 1; }
+echo "ok multidecl"
+
+$F build tests/loop.flen -o "$TMP/loop" >/dev/null
+out=$("$TMP/loop")
+[ "$out" = "18 4 5" ] || { echo "loop FAIL: $out"; exit 1; }
+echo "ok loop"
+
+for neg in neg_break neg_continue neg_arrsize neg_globaltype neg_classcopy; do
+    if $F build "tests/$neg.flen" -o "$TMP/$neg" >/dev/null 2>&1; then
+        echo "$neg FAIL: beklenmedik şekilde derlendi"; exit 1
+    fi
+    echo "ok $neg (reddedildi)"
+done
+
 $F build examples/shell.flen -o "$TMP/shell" >/dev/null
 out=$(printf 'echo test\npwd\nexit\n' | "$TMP/shell")
 echo "$out" | grep -q "test" || { echo "shell FAIL"; exit 1; }

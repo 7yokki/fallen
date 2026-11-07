@@ -65,6 +65,7 @@ struct FnCtx {
     ret: Type,
     owner: Option<String>,
     this_offset: Option<i64>,
+    loop_depth: usize,
 }
 
 type SResult<T> = Result<T, String>;
@@ -207,6 +208,10 @@ impl Sema {
                 Item::Global(g) => {
                     if let Some(init) = &mut g.init {
                         self.analyze_global_init(init)?;
+                        let it = init.ty.clone().unwrap_or(Type::Int);
+                        check_assignable(&g.ty, &it).map_err(|m| {
+                            format!("satır {}: global '{}': {}", g.line, g.name, m)
+                        })?;
                     }
                 }
                 Item::Class(cd) => {
@@ -362,6 +367,7 @@ impl Sema {
             ret: f.ret.clone(),
             owner: f.owner.clone(),
             this_offset: None,
+            loop_depth: 0,
         };
 
         if f.is_method {
@@ -405,6 +411,12 @@ impl Sema {
                     self.analyze_expr(a, ctx)?;
                 }
                 if let Type::Class(cname) = &v.ty {
+                    if v.init.is_some() {
+                        return Err(format!(
+                            "satır {}: '{}' sınıfı '=' ile kopyalanarak başlatılamaz; yapıcı argümanları kullanın (ör. {} {}(...))",
+                            v.line, cname, cname, v.name
+                        ));
+                    }
                     if let Some(ci) = self.classes.get(cname) {
                         if ci.has_ctor {
                             let arity = ci
@@ -445,6 +457,11 @@ impl Sema {
                 }
                 ctx.scopes.pop();
             }
+            Stmt::Group(stmts) => {
+                for st in stmts {
+                    self.analyze_stmt(st, ctx)?;
+                }
+            }
             Stmt::If(c, t, e) => {
                 self.analyze_expr(c, ctx)?;
                 self.analyze_stmt(t, ctx)?;
@@ -454,10 +471,14 @@ impl Sema {
             }
             Stmt::While(c, b) => {
                 self.analyze_expr(c, ctx)?;
+                ctx.loop_depth += 1;
                 self.analyze_stmt(b, ctx)?;
+                ctx.loop_depth -= 1;
             }
             Stmt::DoWhile(b, c) => {
+                ctx.loop_depth += 1;
                 self.analyze_stmt(b, ctx)?;
+                ctx.loop_depth -= 1;
                 self.analyze_expr(c, ctx)?;
             }
             Stmt::For(i, c, inc, b) => {
@@ -471,7 +492,9 @@ impl Sema {
                 if let Some(inc) = inc {
                     self.analyze_expr(inc, ctx)?;
                 }
+                ctx.loop_depth += 1;
                 self.analyze_stmt(b, ctx)?;
+                ctx.loop_depth -= 1;
                 ctx.scopes.pop();
             }
             Stmt::Return(e) => {
@@ -479,7 +502,17 @@ impl Sema {
                     self.analyze_expr(e, ctx)?;
                 }
             }
-            Stmt::Break | Stmt::Continue | Stmt::Empty => {}
+            Stmt::Break(line) => {
+                if ctx.loop_depth == 0 {
+                    return Err(format!("satır {}: 'break' döngü dışında kullanılamaz", line));
+                }
+            }
+            Stmt::Continue(line) => {
+                if ctx.loop_depth == 0 {
+                    return Err(format!("satır {}: 'continue' döngü dışında kullanılamaz", line));
+                }
+            }
+            Stmt::Empty => {}
         }
         Ok(())
     }
@@ -790,8 +823,12 @@ fn usual_arith(a: &Type, b: &Type) -> Type {
     if b.is_pointer() {
         return b.clone();
     }
-    if matches!(a, Type::Long | Type::ULong) || matches!(b, Type::Long | Type::ULong) {
+    if matches!(a, Type::ULong) || matches!(b, Type::ULong) {
+        Type::ULong
+    } else if matches!(a, Type::Long) || matches!(b, Type::Long) {
         Type::Long
+    } else if matches!(a, Type::UInt) || matches!(b, Type::UInt) {
+        Type::UInt
     } else {
         Type::Int
     }

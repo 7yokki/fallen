@@ -1,0 +1,11 @@
+#include <stdio.h>
+
+int main() {
+    unsigned x = 4000000000;
+    signed y = -5;
+    unsigned long ul = -1;
+    int z = -1;
+    printf("%u %d %d %d\n", x, y, 010, (ul + 0) > 0);
+    printf("%lu %u %d\n", (ul + 0) >> 1, (unsigned)z, '\101');
+    return 0;
+}

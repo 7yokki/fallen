@@ -102,13 +102,14 @@ pub enum Stmt {
     Var(VarDecl),
     Expr(Expr),
     Block(Vec<Stmt>),
+    Group(Vec<Stmt>),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     While(Expr, Box<Stmt>),
     DoWhile(Box<Stmt>, Expr),
     For(Option<Box<Stmt>>, Option<Expr>, Option<Expr>, Box<Stmt>),
     Return(Option<Expr>),
-    Break,
-    Continue,
+    Break(usize),
+    Continue(usize),
     Empty,
 }
 

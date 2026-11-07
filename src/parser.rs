@@ -237,6 +237,8 @@ impl Parser {
         } else if self.ident_is("_Bool") || self.ident_is("bool") {
             self.advance();
             Type::UChar
+        } else if is_unsigned || is_signed {
+            Type::Int
         } else {
             let name = self.expect_ident()?;
             if let Some(t) = Self::builtin_type(&name) {
@@ -294,8 +296,14 @@ impl Parser {
                 let n = if self.is_punct("]") {
                     0
                 } else {
+                    if self.is_punct("-") {
+                        return Err(format!(
+                            "satır {}: dizi boyutu negatif olamaz",
+                            self.line()
+                        ));
+                    }
                     match self.advance() {
-                        Tok::Int(v) => v as usize,
+                        Tok::Int(v) if v >= 0 => v as usize,
                         other => {
                             return Err(format!(
                                 "satır {}: dizi boyutu sabit olmalı, bulunan: {:?}",
@@ -322,6 +330,13 @@ impl Parser {
         let base = self.parse_base_type()?;
         let ty = self.parse_pointer(base);
         Ok(ty)
+    }
+
+    fn parse_declarator(&mut self, base: Type) -> PResult<(String, Type)> {
+        let ty = self.parse_pointer(base);
+        let name = self.expect_ident()?;
+        let ty = self.parse_array_suffix(ty)?;
+        Ok((name, ty))
     }
 
     pub fn parse_program(&mut self) -> PResult<Program> {
@@ -393,7 +408,7 @@ impl Parser {
                 continue;
             }
             let base = self.parse_base_type()?;
-            let mut ty = self.parse_pointer(base);
+            let mut ty = self.parse_pointer(base.clone());
             let mname = self.expect_ident()?;
             ty = self.parse_array_suffix(ty)?;
             if self.is_punct("(") {
@@ -420,13 +435,10 @@ impl Parser {
                     line,
                 });
                 while self.eat_punct(",") {
-                    let base = self.parse_base_type()?;
-                    let mut ty = self.parse_pointer(base);
-                    let fname = self.expect_ident()?;
-                    ty = self.parse_array_suffix(ty)?;
+                    let (fname, fty) = self.parse_declarator(base.clone())?;
                     fields.push(FieldDecl {
                         name: fname,
-                        ty,
+                        ty: fty,
                         is_private,
                         line,
                     });
@@ -492,9 +504,7 @@ impl Parser {
     fn parse_global(&mut self, items: &mut Vec<Item>) -> PResult<()> {
         let line = self.line();
         let base = self.parse_base_type()?;
-        let mut ty = self.parse_pointer(base);
-        let name = self.expect_ident()?;
-        ty = self.parse_array_suffix(ty)?;
+        let (name, ty) = self.parse_declarator(base.clone())?;
         if self.is_punct("(") {
             let params = self.parse_params()?;
             let body = self.parse_block()?;
@@ -513,19 +523,29 @@ impl Parser {
             }));
             return Ok(());
         }
-        let init = if self.eat_punct("=") {
-            Some(self.parse_assign()?)
-        } else {
-            None
-        };
-        items.push(Item::Global(VarDecl {
-            name,
-            ty,
-            init,
-            ctor_args: Vec::new(),
-            offset: None,
-            line,
-        }));
+        let mut name = name;
+        let mut ty = ty;
+        loop {
+            let init = if self.eat_punct("=") {
+                Some(self.parse_assign()?)
+            } else {
+                None
+            };
+            items.push(Item::Global(VarDecl {
+                name: name.clone(),
+                ty: ty.clone(),
+                init,
+                ctor_args: Vec::new(),
+                offset: None,
+                line,
+            }));
+            if !self.eat_punct(",") {
+                break;
+            }
+            let (n, t) = self.parse_declarator(base.clone())?;
+            name = n;
+            ty = t;
+        }
         self.expect_punct(";")?;
         Ok(())
     }
@@ -622,14 +642,16 @@ impl Parser {
             return Ok(Stmt::Return(Some(e)));
         }
         if self.ident_is("break") {
+            let line = self.line();
             self.advance();
             self.expect_punct(";")?;
-            return Ok(Stmt::Break);
+            return Ok(Stmt::Break(line));
         }
         if self.ident_is("continue") {
+            let line = self.line();
             self.advance();
             self.expect_punct(";")?;
-            return Ok(Stmt::Continue);
+            return Ok(Stmt::Continue(line));
         }
         if self.looks_like_decl() {
             return self.parse_local_decl();
@@ -642,28 +664,9 @@ impl Parser {
     fn parse_local_decl(&mut self) -> PResult<Stmt> {
         let line = self.line();
         let base = self.parse_base_type()?;
-        let mut ty = self.parse_pointer(base);
-        let name = self.expect_ident()?;
-        ty = self.parse_array_suffix(ty)?;
-        let init = if self.eat_punct("=") {
-            Some(self.parse_assign()?)
-        } else {
-            None
-        };
-        let ctor_args = self.parse_ctor_args(&ty)?;
-        let mut decls = vec![Stmt::Var(VarDecl {
-            name,
-            ty,
-            init,
-            ctor_args,
-            offset: None,
-            line,
-        })];
-        while self.eat_punct(",") {
-            let base = self.parse_base_type()?;
-            let mut ty = self.parse_pointer(base);
-            let name = self.expect_ident()?;
-            ty = self.parse_array_suffix(ty)?;
+        let mut decls = Vec::new();
+        loop {
+            let (name, ty) = self.parse_declarator(base.clone())?;
             let init = if self.eat_punct("=") {
                 Some(self.parse_assign()?)
             } else {
@@ -678,12 +681,15 @@ impl Parser {
                 offset: None,
                 line,
             }));
+            if !self.eat_punct(",") {
+                break;
+            }
         }
         self.expect_punct(";")?;
         if decls.len() == 1 {
             Ok(decls.pop().unwrap())
         } else {
-            Ok(Stmt::Block(decls))
+            Ok(Stmt::Group(decls))
         }
     }
 

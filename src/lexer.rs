@@ -208,6 +208,33 @@ impl<'a> Lexer<'a> {
             })?;
             return Ok(v);
         }
+        if self.peek() == Some(b'0')
+            && matches!(self.peek_at(1), Some(b'0'..=b'7'))
+        {
+            self.bump();
+            let ostart = self.pos;
+            while let Some(c) = self.peek() {
+                if matches!(c, b'0'..=b'7') {
+                    self.bump();
+                } else {
+                    break;
+                }
+            }
+            while let Some(c) = self.peek() {
+                if matches!(c, b'u' | b'U' | b'l' | b'L') {
+                    self.bump();
+                } else {
+                    break;
+                }
+            }
+            let s = std::str::from_utf8(&self.src[ostart..self.pos]).unwrap_or("0");
+            let s = s.trim_end_matches(|c| c == 'u' || c == 'U' || c == 'l' || c == 'L');
+            let v = i64::from_str_radix(s, 8).map_err(|_| LexError {
+                line: self.line,
+                msg: format!("geçersiz sekizlik sayı: {}", s),
+            })?;
+            return Ok(v);
+        }
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() {
                 self.bump();
@@ -239,7 +266,21 @@ impl<'a> Lexer<'a> {
             b'n' => b'\n',
             b't' => b'\t',
             b'r' => b'\r',
-            b'0' => 0,
+            b'0'..=b'7' => {
+                let mut v = (c - b'0') as u16;
+                let mut n = 1;
+                while n < 3 {
+                    match self.peek() {
+                        Some(h) if matches!(h, b'0'..=b'7') => {
+                            v = v * 8 + (h - b'0') as u16;
+                            self.bump();
+                            n += 1;
+                        }
+                        _ => break,
+                    }
+                }
+                v as u8
+            }
             b'a' => 7,
             b'b' => 8,
             b'f' => 12,

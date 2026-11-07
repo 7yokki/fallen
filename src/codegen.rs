@@ -221,15 +221,21 @@ impl<'a> Codegen<'a> {
                     },
                     ConstInit::Bytes(bytes) => {
                         if matches!(g.ty, Type::Array(_, _)) {
-                            let mut line = String::from("  .byte ");
-                            for (i, b) in bytes.iter().enumerate() {
-                                if i > 0 {
-                                    line.push(',');
+                            let take = bytes.len().min(g.size);
+                            if take > 0 {
+                                let mut line = String::from("  .byte ");
+                                for (i, b) in bytes.iter().take(take).enumerate() {
+                                    if i > 0 {
+                                        line.push(',');
+                                    }
+                                    let _ = write!(line, "{}", b);
                                 }
-                                let _ = write!(line, "{}", b);
+                                self.out.push_str(&line);
+                                self.out.push('\n');
                             }
-                            self.out.push_str(&line);
-                            self.out.push('\n');
+                            if g.size > take {
+                                self.emitf(format_args!("  .zero {}", g.size - take));
+                            }
                         } else {
                             let label = self.intern_string(bytes);
                             self.emitf(format_args!("  .quad {}", label));
@@ -435,6 +441,11 @@ impl<'a> Codegen<'a> {
                     self.gen_stmt(st)?;
                 }
             }
+            Stmt::Group(stmts) => {
+                for st in stmts {
+                    self.gen_stmt(st)?;
+                }
+            }
             Stmt::If(c, t, e) => {
                 let child_branch = child_branch_of(c, &self.cur.fork_vars);
                 let mut exit_then = false;
@@ -532,14 +543,14 @@ impl<'a> Codegen<'a> {
                 }
                 self.emitf(format_args!("  jmp {}", self.cur.epilogue.clone()));
             }
-            Stmt::Break => {
+            Stmt::Break(_) => {
                 if let Some(l) = self.cur.break_labels.last().cloned() {
                     self.emitf(format_args!("  jmp {}", l));
                 } else {
                     return Err("'break' döngü dışında".into());
                 }
             }
-            Stmt::Continue => {
+            Stmt::Continue(_) => {
                 if let Some(l) = self.cur.continue_labels.last().cloned() {
                     self.emitf(format_args!("  jmp {}", l));
                 } else {
@@ -1041,8 +1052,8 @@ fn child_branch_of(cond: &Expr, fork_vars: &HashSet<String>) -> Option<u8> {
 
 fn falls_through(s: &Stmt) -> bool {
     match s {
-        Stmt::Return(_) | Stmt::Break | Stmt::Continue => false,
-        Stmt::Block(list) => {
+        Stmt::Return(_) | Stmt::Break(_) | Stmt::Continue(_) => false,
+        Stmt::Block(list) | Stmt::Group(list) => {
             for st in list {
                 if !falls_through(st) {
                     return false;
