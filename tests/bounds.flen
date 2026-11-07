@@ -1,0 +1,9 @@
+#include <stdio.h>
+int main() {
+    int a[4];
+    int i = 5;
+    printf("before\n");
+    a[i] = 1;
+    printf("after\n");
+    return 0;
+}

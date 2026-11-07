@@ -1,0 +1,15 @@
+[package]
+name = "fallen"
+version = "0.1.0"
+edition = "2021"
+description = "Fallen: C syntax, Rust-grade memory safety, direct-to-machine-code compiler"
+
+[[bin]]
+name = "fallen"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

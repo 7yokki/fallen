@@ -1,0 +1,104 @@
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
+// Fallen derleyicisi bu sınıfın maksimum kaplayacağı alanı derleme anında hesaplar.
+class Shell {
+private:
+    char input[1024]; // Derleyici bunun 1024 bayt olduğunu bilir, taşma (overflow) korumalıdır.
+    char *args[64];   // Maksimum 64 argüman analizi.
+    int status;
+
+    // Komut satırını argümanlara bölen fonksiyon
+    void parse_input() {
+        int i = 0;
+        char *token = strtok(this->input, " \t\r\n\a");
+        while (token != NULL && i < 63) {
+            this->args[i] = token;
+            i++;
+            token = strtok(NULL, " \t\r\n\a");
+        }
+        this->args[i] = NULL; // Args dizisinin sonu
+    }
+
+    // Komutu çalıştıran fonksiyon
+    void execute() {
+        if (this->args[0] == NULL) {
+            return; // Boş komut
+        }
+
+        // Yerleşik (Built-in) komut kontrolü: cd
+        if (strcmp(this->args[0], "cd") == 0) {
+            if (this->args[1] == NULL) {
+                fprintf(stderr, "FallenShell: cd için argüman eksik\n");
+            } else if (chdir(this->args[1]) != 0) {
+                perror("FallenShell");
+            }
+            return;
+        }
+
+        // Yerleşik komut kontrolü: exit
+        if (strcmp(this->args[0], "exit") == 0) {
+            this->status = 0;
+            // Derleyici nesnenin ömrünün bittiğini anlar, sıfır bloat ile çıkış kodu üretilir.
+            return; 
+        }
+
+        // Süreç (Process) yönetimi
+        pid_t pid = fork();
+        if (pid == 0) {
+            // Çocuk süreç - Doğrudan makine koduna derlenen execvp çağrısı
+            if (execvp(this->args[0], this->args) == -1) {
+                perror("FallenShell");
+            }
+            // Normalde burada çıkış yapılmalıdır, Fallen derleyicisi bu güvenliği garanti eder.
+        } else if (pid < 0) {
+            perror("FallenShell fork hatası");
+        } else {
+            // Ebeveyn süreç
+            int wstatus;
+            do {
+                waitpid(pid, &wstatus, WUNTRACED);
+            } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+        }
+    }
+
+public:
+    // Constructor (Yapıcı Metot)
+    Shell() {
+        this->status = 1;
+        memset(this->input, 0, 1024);
+    }
+
+    // Ana kabuk döngüsü
+    void run() {
+        printf("Fallen Minimalist Shell'e Hoş Geldiniz!\n");
+        
+        while (this->status) {
+            printf("fallen_sh> ");
+            fflush(stdout);
+
+            // Derleyici Rust seviyesi bellek korumasıyla fgetsin 1024 sınırını aşamayacağını bilir
+            if (fgets(this->input, sizeof(this->input), stdin) == NULL) {
+                break; 
+            }
+
+            // String'in sonundaki yeni satır karakterini temizle
+            this->input[strcspn(this->input, "\n")] = '\0';
+
+            this->parse_input();
+            this->execute();
+        }
+    }
+};
+
+// Programın giriş noktası
+int main() {
+    // Sadece saf makine kodu üretilir. 
+    // Derleyici Shell sınıfının ömrünü ve statik tüketimini bildiği için heap/stack şişmesi yaşanmaz.
+    Shell my_shell;
+    my_shell.run();
+    
+    return 0;
+}

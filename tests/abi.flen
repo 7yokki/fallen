@@ -1,0 +1,8 @@
+#include <stdio.h>
+int neg() { return -1; }
+char low() { return 200; }
+int main() {
+    if (neg() == -1) { printf("neg-ok\n"); }
+    printf("char=%d\n", low());
+    return 0;
+}

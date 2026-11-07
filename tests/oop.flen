@@ -1,0 +1,22 @@
+#include <stdio.h>
+class Point {
+private:
+    int x;
+    int y;
+public:
+    Point(int a, int b) { this->x = a; this->y = b; }
+    int sum() { return this->x + this->y; }
+    void move(int dx) { this->x += dx; }
+};
+int main() {
+    Point p(3, 4);
+    printf("p=%d\n", p.sum());
+    p.move(10);
+    printf("p2=%d\n", p.sum());
+    int a[4];
+    for (int i = 0; i < 4; i++) { a[i] = i * i; }
+    int s = 0;
+    for (int i = 0; i < 4; i++) { s += a[i]; }
+    printf("sum=%d\n", s);
+    return 0;
+}
