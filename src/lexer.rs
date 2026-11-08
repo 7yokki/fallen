@@ -166,6 +166,16 @@ impl<'a> Lexer<'a> {
         Ok(out)
     }
 
+    fn skip_int_suffix(&mut self) {
+        while let Some(c) = self.peek() {
+            if matches!(c, b'u' | b'U' | b'l' | b'L') {
+                self.bump();
+            } else {
+                break;
+            }
+        }
+    }
+
     fn lex_number(&mut self) -> Result<i64, LexError> {
         let start = self.pos;
         if self.peek() == Some(b'0')
@@ -186,6 +196,7 @@ impl<'a> Lexer<'a> {
                 line: self.line,
                 msg: format!("geçersiz onaltılık sayı: {}", s),
             })?;
+            self.skip_int_suffix();
             return Ok(v);
         }
         if self.peek() == Some(b'0')
@@ -206,6 +217,7 @@ impl<'a> Lexer<'a> {
                 line: self.line,
                 msg: format!("geçersiz ikilik sayı: {}", s),
             })?;
+            self.skip_int_suffix();
             return Ok(v);
         }
         if self.peek() == Some(b'0')
@@ -220,19 +232,12 @@ impl<'a> Lexer<'a> {
                     break;
                 }
             }
-            while let Some(c) = self.peek() {
-                if matches!(c, b'u' | b'U' | b'l' | b'L') {
-                    self.bump();
-                } else {
-                    break;
-                }
-            }
             let s = std::str::from_utf8(&self.src[ostart..self.pos]).unwrap_or("0");
-            let s = s.trim_end_matches(|c| c == 'u' || c == 'U' || c == 'l' || c == 'L');
             let v = i64::from_str_radix(s, 8).map_err(|_| LexError {
                 line: self.line,
                 msg: format!("geçersiz sekizlik sayı: {}", s),
             })?;
+            self.skip_int_suffix();
             return Ok(v);
         }
         while let Some(c) = self.peek() {
@@ -242,19 +247,13 @@ impl<'a> Lexer<'a> {
                 break;
             }
         }
-        while let Some(c) = self.peek() {
-            if matches!(c, b'u' | b'U' | b'l' | b'L') {
-                self.bump();
-            } else {
-                break;
-            }
-        }
         let s = std::str::from_utf8(&self.src[start..self.pos]).unwrap_or("0");
-        let s = s.trim_end_matches(|c| c == 'u' || c == 'U' || c == 'l' || c == 'L');
-        s.parse::<i64>().map_err(|_| LexError {
+        let v = s.parse::<i64>().map_err(|_| LexError {
             line: self.line,
             msg: format!("geçersiz sayı: {}", s),
-        })
+        })?;
+        self.skip_int_suffix();
+        Ok(v)
     }
 
     fn lex_escape(&mut self) -> Result<u8, LexError> {

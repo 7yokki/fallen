@@ -54,7 +54,29 @@ out=$("$TMP/loop")
 [ "$out" = "18 4 5" ] || { echo "loop FAIL: $out"; exit 1; }
 echo "ok loop"
 
-for neg in neg_break neg_continue neg_arrsize neg_globaltype neg_classcopy; do
+$F build tests/multidim.flen -o "$TMP/multidim" >/dev/null
+out=$("$TMP/multidim")
+[ "$out" = $'0 2 10\n11 12 24' ] || { echo "multidim FAIL: $out"; exit 1; }
+echo "ok multidim"
+
+$F build tests/arrayparam.flen -o "$TMP/arrayparam" >/dev/null
+out=$("$TMP/arrayparam")
+[ "$out" = "6" ] || { echo "arrayparam FAIL: $out"; exit 1; }
+echo "ok arrayparam"
+
+$F build tests/proto.flen -o "$TMP/proto" >/dev/null
+out=$("$TMP/proto")
+[ "$out" = "5" ] || { echo "proto FAIL: $out"; exit 1; }
+echo "ok proto"
+
+$F build tests/suffix.flen -o "$TMP/suffix" >/dev/null
+out=$("$TMP/suffix")
+[ "$out" = "255 10 255" ] || { echo "suffix FAIL: $out"; exit 1; }
+echo "ok suffix"
+
+for neg in neg_break neg_continue neg_arrsize neg_globaltype neg_classcopy \
+    neg_return_type neg_arg_count neg_undef_func neg_dup_func neg_private_ctor \
+    neg_this_assign neg_ptr_dot neg_dup_case; do
     if $F build "tests/$neg.flen" -o "$TMP/$neg" >/dev/null 2>&1; then
         echo "$neg FAIL: beklenmedik şekilde derlendi"; exit 1
     fi
@@ -67,4 +89,14 @@ echo "$out" | grep -q "test" || { echo "shell FAIL"; exit 1; }
 err=$(printf 'nosuchcmd_xyz\nexit\n' | "$TMP/shell" 2>&1 >/dev/null)
 echo "$err" | grep -q "No such file" || { echo "shell exec safety FAIL"; exit 1; }
 echo "ok shell"
+
+$F build tests/switch.flen -o "$TMP/switch" >/dev/null
+out=$("$TMP/switch")
+[ "$out" = "iki" ] || { echo "switch FAIL: $out"; exit 1; }
+echo "ok switch"
+
+$F build tests/switch_default.flen -o "$TMP/switch_default" >/dev/null
+out=$("$TMP/switch_default")
+[ "$out" = "uc" ] || { echo "switch_default FAIL: $out"; exit 1; }
+echo "ok switch_default"
 echo "TÜM TESTLER GEÇTİ"

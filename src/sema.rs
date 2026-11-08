@@ -1,6 +1,6 @@
 use crate::ast::*;
 use crate::types::{align_up, Type};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]
 pub struct FieldInfo {
@@ -66,6 +66,7 @@ struct FnCtx {
     owner: Option<String>,
     this_offset: Option<i64>,
     loop_depth: usize,
+    switch_depth: usize,
 }
 
 type SResult<T> = Result<T, String>;
@@ -152,6 +153,75 @@ impl Sema {
         add("memcpy", vptr.clone(), vec![vptr.clone(), vptr.clone(), ulong.clone()], false);
         add("memcmp", int.clone(), vec![vptr.clone(), vptr.clone(), ulong.clone()], false);
         add("atoi", int.clone(), vec![cptr.clone()], false);
+        add("atol", Type::Long, vec![cptr.clone()], false);
+        add("atof", Type::Int, vec![cptr.clone()], false); // mapped to int (no float yet)
+        add("abs", int.clone(), vec![int.clone()], false);
+        add("labs", Type::Long, vec![Type::Long], false);
+        add("sprintf", int.clone(), vec![cptr.clone(), cptr.clone()], true);
+        add("snprintf", int.clone(), vec![cptr.clone(), ulong.clone(), cptr.clone()], true);
+        add("sscanf", int.clone(), vec![cptr.clone(), cptr.clone()], true);
+        add("scanf", int.clone(), vec![cptr.clone()], true);
+        add("fscanf", int.clone(), vec![vptr.clone(), cptr.clone()], true);
+        add("strcpy", cptr.clone(), vec![cptr.clone(), cptr.clone()], false);
+        add("strncpy", cptr.clone(), vec![cptr.clone(), cptr.clone(), ulong.clone()], false);
+        add("strcat", cptr.clone(), vec![cptr.clone(), cptr.clone()], false);
+        add("strncat", cptr.clone(), vec![cptr.clone(), cptr.clone(), ulong.clone()], false);
+        add("strncmp", int.clone(), vec![cptr.clone(), cptr.clone(), ulong.clone()], false);
+        add("strchr", cptr.clone(), vec![cptr.clone(), int.clone()], false);
+        add("strrchr", cptr.clone(), vec![cptr.clone(), int.clone()], false);
+        add("strstr", cptr.clone(), vec![cptr.clone(), cptr.clone()], false);
+        add("strnlen", ulong.clone(), vec![cptr.clone(), ulong.clone()], false);
+        add("strerror", cptr.clone(), vec![int.clone()], false);
+        add("memmove", vptr.clone(), vec![vptr.clone(), vptr.clone(), ulong.clone()], false);
+        add("open", int.clone(), vec![cptr.clone(), int.clone()], true);
+        add("close", int.clone(), vec![int.clone()], false);
+        add("read", Type::Long, vec![int.clone(), vptr.clone(), ulong.clone()], false);
+        add("write", Type::Long, vec![int.clone(), vptr.clone(), ulong.clone()], false);
+        add("lseek", Type::Long, vec![int.clone(), Type::Long, int.clone()], false);
+        add("getenv", cptr.clone(), vec![cptr.clone()], false);
+        add("system", int.clone(), vec![cptr.clone()], false);
+        add("time", Type::Long, vec![Type::ptr(Type::Long)], false);
+        add("sleep", Type::UInt, vec![Type::UInt], false);
+        add("usleep", int.clone(), vec![Type::ULong], false);
+        add("rand", int.clone(), vec![], false);
+        add("srand", Type::Void, vec![Type::UInt], false);
+        add("realloc", vptr.clone(), vec![vptr.clone(), ulong.clone()], false);
+        add("fopen", vptr.clone(), vec![cptr.clone(), cptr.clone()], false);
+        add("fclose", int.clone(), vec![vptr.clone()], false);
+        add("fread", ulong.clone(), vec![vptr.clone(), ulong.clone(), ulong.clone(), vptr.clone()], false);
+        add("fwrite", ulong.clone(), vec![vptr.clone(), ulong.clone(), ulong.clone(), vptr.clone()], false);
+        add("fseek", int.clone(), vec![vptr.clone(), Type::Long, int.clone()], false);
+        add("ftell", Type::Long, vec![vptr.clone()], false);
+        add("feof", int.clone(), vec![vptr.clone()], false);
+        add("ferror", int.clone(), vec![vptr.clone()], false);
+        add("rewind", Type::Void, vec![vptr.clone()], false);
+        add("remove", int.clone(), vec![cptr.clone()], false);
+        add("rename", int.clone(), vec![cptr.clone(), cptr.clone()], false);
+        add("isdigit", int.clone(), vec![int.clone()], false);
+        add("isalpha", int.clone(), vec![int.clone()], false);
+        add("isalnum", int.clone(), vec![int.clone()], false);
+        add("isspace", int.clone(), vec![int.clone()], false);
+        add("isupper", int.clone(), vec![int.clone()], false);
+        add("islower", int.clone(), vec![int.clone()], false);
+        add("toupper", int.clone(), vec![int.clone()], false);
+        add("tolower", int.clone(), vec![int.clone()], false);
+        add("getpid", int.clone(), vec![], false);
+        add("getppid", int.clone(), vec![], false);
+        add("getuid", Type::UInt, vec![], false);
+        add("getcwd", cptr.clone(), vec![cptr.clone(), ulong.clone()], false);
+        add("mkdir", int.clone(), vec![cptr.clone(), Type::UInt], false);
+        add("rmdir", int.clone(), vec![cptr.clone()], false);
+        add("unlink", int.clone(), vec![cptr.clone()], false);
+        add("stat", int.clone(), vec![cptr.clone(), vptr.clone()], false);
+        add("access", int.clone(), vec![cptr.clone(), int.clone()], false);
+        add("signal", vptr.clone(), vec![int.clone(), vptr.clone()], false);
+        add("kill", int.clone(), vec![int.clone(), int.clone()], false);
+        add("pipe", int.clone(), vec![Type::ptr(int.clone())], false);
+        add("dup", int.clone(), vec![int.clone()], false);
+        add("dup2", int.clone(), vec![int.clone(), int.clone()], false);
+        add("execv", int.clone(), vec![cptr.clone(), Type::ptr(cptr.clone())], false);
+        add("execve", int.clone(), vec![cptr.clone(), Type::ptr(cptr.clone()), Type::ptr(cptr.clone())], false);
+        add("_exit", Type::Void, vec![int.clone()], false);
         add("__fallen_wifexited", int.clone(), vec![int.clone()], false);
         add("__fallen_wifsignaled", int.clone(), vec![int.clone()], false);
 
@@ -168,7 +238,12 @@ impl Sema {
         let mut class_decls: HashMap<String, ClassDecl> = HashMap::new();
         for item in &program.items {
             if let Item::Class(c) = item {
-                class_decls.insert(c.name.clone(), c.clone());
+                if class_decls.insert(c.name.clone(), c.clone()).is_some() {
+                    return Err(format!(
+                        "satır {}: sınıf '{}' birden fazla tanımlandı",
+                        c.line, c.name
+                    ));
+                }
             }
         }
 
@@ -181,9 +256,30 @@ impl Sema {
         self.classes = computed;
         let _ = &class_decls;
 
+        let mut func_defined: HashMap<String, bool> = HashMap::new();
         for item in &program.items {
             match item {
                 Item::Func(f) => {
+                    if self.globals.contains_key(&f.name) {
+                        return Err(format!(
+                            "satır {}: '{}' hem fonksiyon hem global olarak tanımlanmış",
+                            f.line, f.name
+                        ));
+                    }
+                    if let Some(existing_defined) = func_defined.get(&f.name) {
+                        if *existing_defined || f.is_prototype {
+                            return Err(format!(
+                                "satır {}: '{}' fonksiyonu birden fazla tanımlandı",
+                                f.line, f.name
+                            ));
+                        }
+                    } else if self.funcs.contains_key(&f.name) {
+                        return Err(format!(
+                            "satır {}: '{}' fonksiyonu birden fazla tanımlandı",
+                            f.line, f.name
+                        ));
+                    }
+                    func_defined.insert(f.name.clone(), !f.is_prototype);
                     self.funcs.insert(
                         f.name.clone(),
                         FuncSig {
@@ -194,7 +290,18 @@ impl Sema {
                     );
                 }
                 Item::Global(g) => {
-                    self.globals.insert(g.name.clone(), g.ty.clone());
+                    if self.funcs.contains_key(&g.name) {
+                        return Err(format!(
+                            "satır {}: '{}' hem global hem fonksiyon olarak tanımlanmış",
+                            g.line, g.name
+                        ));
+                    }
+                    if self.globals.insert(g.name.clone(), g.ty.clone()).is_some() {
+                        return Err(format!(
+                            "satır {}: global '{}' birden fazla tanımlandı",
+                            g.line, g.name
+                        ));
+                    }
                 }
                 Item::Class(_) => {}
             }
@@ -203,7 +310,9 @@ impl Sema {
         for item in program.items.iter_mut() {
             match item {
                 Item::Func(f) => {
-                    self.analyze_func(f)?;
+                    if !f.is_prototype {
+                        self.analyze_func(f)?;
+                    }
                 }
                 Item::Global(g) => {
                     if let Some(init) = &mut g.init {
@@ -265,7 +374,12 @@ impl Sema {
                 offset,
                 is_private: f.is_private,
             };
-            fields.insert(f.name.clone(), fi.clone());
+            if fields.insert(f.name.clone(), fi.clone()).is_some() {
+                return Err(format!(
+                    "satır {}: '{}' sınıfında '{}' alanı birden fazla tanımlandı",
+                    f.line, name, f.name
+                ));
+            }
             order.push(fi);
             offset += s;
         }
@@ -273,6 +387,18 @@ impl Sema {
         let mut methods = HashMap::new();
         let mut has_ctor = false;
         for m in &decl.methods {
+            if methods.contains_key(&m.name) {
+                return Err(format!(
+                    "satır {}: '{}' sınıfında '{}' metodu/yapıcısı birden fazla tanımlandı",
+                    m.line, name, m.name
+                ));
+            }
+            if fields.contains_key(&m.name) {
+                return Err(format!(
+                    "satır {}: '{}' sınıfında '{}' adı hem alan hem metot olarak kullanılamaz",
+                    m.line, name, m.name
+                ));
+            }
             let label = if m.is_ctor {
                 format!("{}_ctor", name)
             } else {
@@ -368,6 +494,7 @@ impl Sema {
             owner: f.owner.clone(),
             this_offset: None,
             loop_depth: 0,
+            switch_depth: 0,
         };
 
         if f.is_method {
@@ -380,12 +507,25 @@ impl Sema {
         }
 
         for p in f.params.iter_mut() {
+            if ctx.scopes[0].contains_key(&p.name) {
+                return Err(format!(
+                    "satır {}: '{}' parametresi birden fazla tanımlandı",
+                    p.line, p.name
+                ));
+            }
             let off = self.alloc(&mut ctx, &p.ty);
             p.offset = Some(off);
             self.declare(&mut ctx, p.name.clone().as_str(), p.ty.clone(), off);
         }
 
         self.analyze_stmt(&mut f.body, &mut ctx)?;
+        let is_main = f.owner.is_none() && f.name == "main";
+        if !matches!(f.ret, Type::Void) && !is_main && !stmt_always_returns(&f.body) {
+            return Err(format!(
+                "satır {}: '{}' non-void fonksiyonunun tüm yollarında 'return' yok",
+                f.line, f.name
+            ));
+        }
         let frame = align_up(ctx.used, 16);
         f.frame_size = frame;
         self.report.push(MemoryReport {
@@ -404,6 +544,14 @@ impl Sema {
     fn analyze_stmt(&mut self, s: &mut Stmt, ctx: &mut FnCtx) -> SResult<()> {
         match s {
             Stmt::Var(v) => {
+                if let Some(scope) = ctx.scopes.last() {
+                    if scope.contains_key(&v.name) {
+                        return Err(format!(
+                            "satır {}: '{}' aynı kapsamda birden fazla tanımlandı",
+                            v.line, v.name
+                        ));
+                    }
+                }
                 let off = self.alloc(ctx, &v.ty);
                 v.offset = Some(off);
                 self.declare(ctx, &v.name, v.ty.clone(), off);
@@ -418,18 +566,35 @@ impl Sema {
                         ));
                     }
                     if let Some(ci) = self.classes.get(cname) {
-                        if ci.has_ctor {
-                            let arity = ci
-                                .methods
-                                .values()
-                                .find(|m| m.is_ctor)
-                                .map(|m| m.params.len())
-                                .unwrap_or(0);
-                            if v.ctor_args.len() < arity {
+                        if let Some(ctor) = ci.methods.values().find(|m| m.is_ctor) {
+                            if ctor.is_private && ctx.owner.as_deref() != Some(cname.as_str()) {
                                 return Err(format!(
-                                    "satır {}: '{}' yapıcısı en az {} argüman bekliyor",
-                                    v.line, cname, arity
+                                    "satır {}: '{}::{}' yapıcısı özel (private)",
+                                    v.line, cname, cname
                                 ));
+                            }
+                            if v.ctor_args.len() != ctor.params.len() {
+                                return Err(format!(
+                                    "satır {}: '{}' yapıcısı {} argüman bekliyor, {} verildi",
+                                    v.line,
+                                    cname,
+                                    ctor.params.len(),
+                                    v.ctor_args.len()
+                                ));
+                            }
+                            for (i, (arg, param_ty)) in
+                                v.ctor_args.iter().zip(ctor.params.iter()).enumerate()
+                            {
+                                let at = arg.ty.clone().unwrap_or(Type::Int);
+                                check_assignable(param_ty, &at).map_err(|m| {
+                                    format!(
+                                        "satır {}: '{}' yapıcısı {}'. argüman: {}",
+                                        v.line,
+                                        cname,
+                                        i + 1,
+                                        m
+                                    )
+                                })?;
                             }
                         } else if !v.ctor_args.is_empty() {
                             return Err(format!(
@@ -498,19 +663,75 @@ impl Sema {
                 ctx.scopes.pop();
             }
             Stmt::Return(e) => {
-                if let Some(e) = e {
-                    self.analyze_expr(e, ctx)?;
+                let ret = ctx.ret.clone();
+                match (&ret, e) {
+                    (Type::Void, Some(_)) => {
+                        return Err("void fonksiyondan değer döndürülemez".into());
+                    }
+                    (Type::Void, None) => {}
+                    (_, None) => {
+                        return Err("non-void fonksiyondan 'return' değeri gerekli".into());
+                    }
+                    (r, Some(expr)) => {
+                        self.analyze_expr(expr, ctx)?;
+                        let et = expr.ty.clone().unwrap_or(Type::Int);
+                        if r.is_aggregate() {
+                            return Err(format!(
+                                "satır {}: aggregate (dizi/sınıf) dönüş değeri desteklenmiyor",
+                                expr.line
+                            ));
+                        }
+                        check_assignable(r, &et).map_err(|m| {
+                            format!("satır {}: dönüş değeri: {}", expr.line, m)
+                        })?;
+                    }
                 }
             }
             Stmt::Break(line) => {
-                if ctx.loop_depth == 0 {
-                    return Err(format!("satır {}: 'break' döngü dışında kullanılamaz", line));
+                if ctx.loop_depth == 0 && ctx.switch_depth == 0 {
+                    return Err(format!("satır {}: 'break' döngü veya switch dışında kullanılamaz", line));
                 }
             }
             Stmt::Continue(line) => {
                 if ctx.loop_depth == 0 {
                     return Err(format!("satır {}: 'continue' döngü dışında kullanılamaz", line));
                 }
+            }
+            Stmt::Switch(expr, cases) => {
+                self.analyze_expr(expr, ctx)?;
+                let et = expr.ty.clone().unwrap_or(Type::Int);
+                if !et.is_integer() {
+                    return Err(format!(
+                        "satır {}: switch ifadesi tam sayı tipinde olmalı",
+                        expr.line
+                    ));
+                }
+                let mut seen: HashSet<i64> = HashSet::new();
+                let mut has_default = false;
+                for case in cases.iter() {
+                    if let Some(v) = case.value {
+                        if !seen.insert(v) {
+                            return Err(format!(
+                                "satır {}: switch içinde 'case {}' birden fazla tanımlandı",
+                                expr.line, v
+                            ));
+                        }
+                    } else if has_default {
+                        return Err(format!(
+                            "satır {}: switch içinde birden fazla 'default' olamaz",
+                            expr.line
+                        ));
+                    } else {
+                        has_default = true;
+                    }
+                }
+                ctx.switch_depth += 1;
+                for case in cases {
+                    for st in &mut case.body {
+                        self.analyze_stmt(st, ctx)?;
+                    }
+                }
+                ctx.switch_depth -= 1;
             }
             Stmt::Empty => {}
         }
@@ -636,6 +857,9 @@ impl Sema {
                 if lt.is_array() || matches!(lt, Type::Class(_)) {
                     return Err(format!("satır {}: dizi/sınıf değerine atama yapılamaz", e.line));
                 }
+                let rt = r.ty.clone().unwrap_or(Type::Int);
+                check_assignable(&lt, &rt)
+                    .map_err(|m| format!("satır {}: atama: {}", e.line, m))?;
                 e.ty = Some(lt);
             }
             ExprKind::CompoundAssign(_, l, r) => {
@@ -654,14 +878,29 @@ impl Sema {
                 e.ty = target.ty.clone();
             }
             ExprKind::Call(callee, args) => {
-                let mut handled = false;
-                let mut sig: Option<FuncSig> = None;
-                if let ExprKind::Member { base, field, .. } = &mut callee.kind {
+                let (sig, display): (Option<FuncSig>, String) = if let ExprKind::Member {
+                    base,
+                    field,
+                    arrow,
+                } = &mut callee.kind
+                {
                     self.analyze_expr(base, ctx)?;
                     let base_ty = base.ty.clone().unwrap_or(Type::Int);
                     let cname = class_of(&base_ty).ok_or_else(|| {
                         format!("satır {}: metot çağrısı için sınıf/pointer gerekli", e.line)
                     })?;
+                    if base_ty.is_pointer() && !*arrow {
+                        return Err(format!(
+                            "satır {}: pointer üzerinde '.' kullanılamaz, '->' kullanın",
+                            e.line
+                        ));
+                    }
+                    if matches!(base_ty, Type::Class(_)) && *arrow {
+                        return Err(format!(
+                            "satır {}: değer üzerinde '->' kullanılamaz, '.' kullanın",
+                            e.line
+                        ));
+                    }
                     let info = self
                         .classes
                         .get(&cname)
@@ -676,12 +915,14 @@ impl Sema {
                         ));
                     }
                     e.call_label = Some(m.label.clone());
-                    sig = Some(FuncSig {
-                        ret: m.ret.clone(),
-                        params: m.params.clone(),
-                        variadic: false,
-                    });
-                    handled = true;
+                    (
+                        Some(FuncSig {
+                            ret: m.ret.clone(),
+                            params: m.params.clone(),
+                            variadic: false,
+                        }),
+                        field.clone(),
+                    )
                 } else if let ExprKind::Ident(name) = &callee.kind {
                     if self.lookup(ctx, name).is_some() {
                         return Err(format!(
@@ -691,34 +932,54 @@ impl Sema {
                     }
                     if let Some(s) = self.externs.get(name) {
                         e.call_label = Some(name.clone());
-                        sig = Some(s.clone());
+                        (Some(s.clone()), name.clone())
                     } else if let Some(s) = self.funcs.get(name) {
                         e.call_label = Some(name.clone());
-                        sig = Some(s.clone());
+                        (Some(s.clone()), name.clone())
                     } else {
-                        e.call_label = Some(name.clone());
-                        sig = Some(FuncSig {
-                            ret: Type::Int,
-                            params: vec![],
-                            variadic: true,
-                        });
+                        return Err(format!(
+                            "satır {}: tanımsız fonksiyon '{}'",
+                            e.line, name
+                        ));
                     }
-                    handled = true;
-                }
-                if !handled {
+                } else {
                     return Err(format!("satır {}: geçersiz fonksiyon çağrısı", e.line));
-                }
+                };
                 for a in args.iter_mut() {
                     self.analyze_expr(a, ctx)?;
                 }
                 if let Some(s) = sig {
-                    if !s.variadic && !s.params.is_empty() && args.len() < s.params.len() {
+                    if !s.variadic && args.len() != s.params.len() {
                         return Err(format!(
-                            "satır {}: fonksiyon en az {} argüman bekliyor, {} verildi",
+                            "satır {}: '{}' fonksiyonu {} argüman bekliyor, {} verildi",
                             e.line,
+                            display,
                             s.params.len(),
                             args.len()
                         ));
+                    }
+                    if s.variadic && args.len() < s.params.len() {
+                        return Err(format!(
+                            "satır {}: '{}' fonksiyonu en az {} argüman bekliyor, {} verildi",
+                            e.line,
+                            display,
+                            s.params.len(),
+                            args.len()
+                        ));
+                    }
+                    for (i, (arg, param_ty)) in
+                        args.iter().zip(s.params.iter()).enumerate()
+                    {
+                        let at = arg.ty.clone().unwrap_or(Type::Int);
+                        check_assignable(param_ty, &at).map_err(|m| {
+                            format!(
+                                "satır {}: '{}' çağrısı {}'. argüman: {}",
+                                e.line,
+                                display,
+                                i + 1,
+                                m
+                            )
+                        })?;
                     }
                     e.ty = Some(s.ret);
                 } else {
@@ -751,6 +1012,12 @@ impl Sema {
                 if matches!(bt, Type::Class(_)) && *arrow {
                     return Err(format!(
                         "satır {}: değer üzerinde '->' kullanılamaz, '.' kullanın",
+                        e.line
+                    ));
+                }
+                if bt.is_pointer() && !*arrow {
+                    return Err(format!(
+                        "satır {}: pointer üzerinde '.' kullanılamaz, '->' kullanın",
                         e.line
                     ));
                 }
@@ -794,11 +1061,31 @@ impl Sema {
     }
 }
 
+fn stmt_always_returns(s: &Stmt) -> bool {
+    match s {
+        Stmt::Return(_) => true,
+        Stmt::Block(list) | Stmt::Group(list) => {
+            list.iter().any(|st| stmt_always_returns(st))
+        }
+        Stmt::If(_, then, Some(other)) => {
+            stmt_always_returns(then) && stmt_always_returns(other)
+        }
+        Stmt::DoWhile(body, _) => stmt_always_returns(body),
+        Stmt::Switch(_, cases) => {
+            !cases.is_empty()
+                && cases.iter().any(|c| c.value.is_none())
+                && cases
+                    .iter()
+                    .all(|c| c.body.iter().any(|st| stmt_always_returns(st)))
+        }
+        _ => false,
+    }
+}
+
 fn is_lvalue(e: &Expr) -> bool {
     matches!(
         e.kind,
         ExprKind::Ident(_)
-            | ExprKind::This
             | ExprKind::Member { .. }
             | ExprKind::Index(_, _)
             | ExprKind::Un(UnOp::Deref, _)

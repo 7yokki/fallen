@@ -1,0 +1,10 @@
+class P {
+private:
+    int x;
+    P(int a) { this->x = a; }
+};
+
+int main() {
+    P p(1);
+    return 0;
+}

@@ -1,0 +1,10 @@
+class C {
+public:
+    void f() { this = 0; }
+};
+
+int main() {
+    C c;
+    c.f();
+    return 0;
+}

@@ -140,10 +140,16 @@ impl<'a> Codegen<'a> {
         self.emit(".text");
         for item in &program.items {
             match item {
-                Item::Func(f) => self.gen_function(f)?,
+                Item::Func(f) => {
+                    if !f.is_prototype {
+                        self.gen_function(f)?;
+                    }
+                }
                 Item::Class(c) => {
                     for m in &c.methods {
-                        self.gen_function(m)?;
+                        if !m.is_prototype {
+                            self.gen_function(m)?;
+                        }
                     }
                 }
                 Item::Global(g) => {
@@ -558,6 +564,45 @@ impl<'a> Codegen<'a> {
                 }
             }
             Stmt::Empty => {}
+            Stmt::Switch(expr, cases) => {
+                // Evaluate the switch expression into %rax, save in %r11
+                self.gen_expr(expr)?;
+                self.emit("  mov %rax, %r11");
+
+                let end_label = self.new_label("switch_end");
+                let case_labels: Vec<String> = cases
+                    .iter()
+                    .map(|_| self.new_label("case"))
+                    .collect();
+                let default_index = cases.iter().position(|c| c.value.is_none());
+
+                for (i, case) in cases.iter().enumerate() {
+                    if let Some(val) = case.value {
+                        self.emitf(format_args!("  cmp ${}, %r11", val));
+                        self.emitf(format_args!("  je {}", case_labels[i]));
+                    }
+                }
+
+                // Jump to default or end
+                if let Some(i) = default_index {
+                    self.emitf(format_args!("  jmp {}", case_labels[i]));
+                } else {
+                    self.emitf(format_args!("  jmp {}", end_label));
+                }
+
+                // Push break label so inner `break` jumps to end
+                self.cur.break_labels.push(end_label.clone());
+
+                for (i, case) in cases.iter().enumerate() {
+                    self.emitf(format_args!("{}:", case_labels[i]));
+                    for st in &case.body {
+                        self.gen_stmt(st)?;
+                    }
+                }
+
+                self.cur.break_labels.pop();
+                self.emitf(format_args!("{}:", end_label));
+            }
         }
         Ok(())
     }
@@ -1068,6 +1113,15 @@ fn falls_through(s: &Stmt) -> bool {
                 None => true,
             };
             tf || ef
+        }
+        Stmt::Switch(_, cases) => {
+            if cases.is_empty() {
+                return true;
+            }
+            // Falls through if the last case body falls through
+            cases.last().map(|c| {
+                c.body.last().map(|s| falls_through(s)).unwrap_or(true)
+            }).unwrap_or(true)
         }
         _ => true,
     }

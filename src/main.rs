@@ -16,11 +16,13 @@ use std::time::Instant;
 
 fn usage() {
     eprintln!(
-        "Fallen derleyici v0.1\n\
+        "Fallen derleyici v0.3\n\
          Kullanım:\n\
-         \x20 fallen build <dosya.flen> [-o çıktı] [-S] [--stats] [--keep-asm]\n\
-         \x20 fallen run   <dosya.flen> [--stats]\n\n\
-         C sözdizimi + Rust seviyesi bellek koruması + OOP + doğrudan makine kodu."
+         \x20 fallen build  <dosya.flen> [-o çıktı] [-S] [--stats] [--keep-asm]\n\
+         \x20 fallen run    <dosya.flen> [--stats]\n\
+         \x20 fallen check  <dosya.flen>              (kod üretmeden semantik kontrol)\n\
+         \x20 fallen version\n\n\
+         C sözdizimi + Rust seviyesi bellek koruması + OOP + switch/case + doğrudan makine kodu."
     );
 }
 
@@ -40,7 +42,11 @@ fn parse_args() -> Result<Options, String> {
         usage();
         std::process::exit(0);
     }
-    if command != "build" && command != "run" && command != "compile" {
+    if command == "--version" || command == "version" {
+        println!("fallen 0.3.0");
+        std::process::exit(0);
+    }
+    if command != "build" && command != "run" && command != "compile" && command != "check" {
         if command.ends_with(".flen") {
             let mut rest = vec![command.clone()];
             rest.extend(args);
@@ -185,6 +191,32 @@ fn real_main() -> Result<(), String> {
     sema.analyze(&mut program)
         .map_err(|e| format!("anlamsal hata: {}", e))?;
     let t_sema = t0.elapsed();
+
+    // "check" komutu: sadece semantik analiz, kod üretme yok
+    if opts.command == "check" {
+        eprintln!(
+            "Fallen: {} — semantik kontrol OK ({} ms)",
+            opts.input.display(),
+            t_sema.as_millis()
+        );
+        if opts.stats {
+            eprintln!("\n--- Fallen anlamsal analiz ---");
+            eprintln!("lexer+ön  : {:?}", t_lex);
+            eprintln!("parser   : {:?}", t_parse.saturating_sub(t_lex));
+            eprintln!("semantik : {:?}", t_sema.saturating_sub(t_parse));
+            for c in sema.classes.values() {
+                eprintln!(
+                    "sınıf {:<16} boyut={:>4} bayt  hizalama={}  alan={}  metot={}",
+                    c.name,
+                    c.size,
+                    c.align,
+                    c.field_order.len(),
+                    c.methods.len()
+                );
+            }
+        }
+        return Ok(());
+    }
 
     let cg = codegen::Codegen::new(&sema.classes, &sema.funcs);
     let asm = cg

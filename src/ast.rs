@@ -110,7 +110,14 @@ pub enum Stmt {
     Return(Option<Expr>),
     Break(usize),
     Continue(usize),
+    Switch(Expr, Vec<SwitchCase>),
     Empty,
+}
+
+#[derive(Clone, Debug)]
+pub struct SwitchCase {
+    pub value: Option<i64>, // None = default
+    pub body: Vec<Stmt>,
 }
 
 #[derive(Clone, Debug)]
@@ -123,6 +130,7 @@ pub struct FuncDecl {
     pub is_ctor: bool,
     pub is_method: bool,
     pub is_private: bool,
+    pub is_prototype: bool,
     pub frame_size: usize,
     pub this_offset: Option<i64>,
     pub line: usize,

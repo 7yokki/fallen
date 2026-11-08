@@ -289,7 +289,8 @@ impl Parser {
         ty
     }
 
-    fn parse_array_suffix(&mut self, mut ty: Type) -> PResult<Type> {
+    fn parse_array_suffix(&mut self, ty: Type) -> PResult<Type> {
+        let mut dims: Vec<usize> = Vec::new();
         loop {
             if self.is_punct("[") {
                 self.advance();
@@ -314,16 +315,28 @@ impl Parser {
                     }
                 };
                 self.expect_punct("]")?;
-                if n == 0 {
-                    ty = Type::Ptr(Box::new(ty));
-                } else {
-                    ty = Type::Array(Box::new(ty), n);
-                }
+                dims.push(n);
             } else {
                 break;
             }
         }
+
+        let mut ty = ty;
+        for n in dims.iter().rev() {
+            if *n == 0 {
+                ty = Type::Ptr(Box::new(ty));
+            } else {
+                ty = Type::Array(Box::new(ty), *n);
+            }
+        }
         Ok(ty)
+    }
+
+    fn decay_param_type(ty: Type) -> Type {
+        match ty {
+            Type::Array(elem, _) => Type::Ptr(elem),
+            other => other,
+        }
     }
 
     fn parse_type_name(&mut self) -> PResult<Type> {
@@ -377,7 +390,7 @@ impl Parser {
                 || self.ident_is("protected"))
                 && self.is_punct_at(1, ":")
             {
-                is_private = self.ident_is("private");
+                is_private = self.ident_is("private") || self.ident_is("protected");
                 self.advance();
                 self.advance();
                 continue;
@@ -401,6 +414,7 @@ impl Parser {
                     is_ctor: true,
                     is_method: true,
                     is_private,
+                    is_prototype: false,
                     frame_size: 0,
                     this_offset: None,
                     line,
@@ -423,6 +437,7 @@ impl Parser {
                     is_ctor: false,
                     is_method: true,
                     is_private,
+                    is_prototype: false,
                     frame_size: 0,
                     this_offset: None,
                     line,
@@ -483,6 +498,7 @@ impl Parser {
                 format!("__arg{}", idx)
             };
             ty = self.parse_array_suffix(ty)?;
+            let ty = Self::decay_param_type(ty);
             params.push(VarDecl {
                 name,
                 ty,
@@ -507,6 +523,23 @@ impl Parser {
         let (name, ty) = self.parse_declarator(base.clone())?;
         if self.is_punct("(") {
             let params = self.parse_params()?;
+            if self.eat_punct(";") {
+                items.push(Item::Func(FuncDecl {
+                    name,
+                    ret: ty,
+                    params,
+                    body: Stmt::Empty,
+                    owner: None,
+                    is_ctor: false,
+                    is_method: false,
+                    is_private: false,
+                    is_prototype: true,
+                    frame_size: 0,
+                    this_offset: None,
+                    line,
+                }));
+                return Ok(());
+            }
             let body = self.parse_block()?;
             items.push(Item::Func(FuncDecl {
                 name,
@@ -517,6 +550,7 @@ impl Parser {
                 is_ctor: false,
                 is_method: false,
                 is_private: false,
+                is_prototype: false,
                 frame_size: 0,
                 this_offset: None,
                 line,
@@ -641,6 +675,9 @@ impl Parser {
             self.expect_punct(";")?;
             return Ok(Stmt::Return(Some(e)));
         }
+        if self.ident_is("switch") {
+            return self.parse_switch();
+        }
         if self.ident_is("break") {
             let line = self.line();
             self.advance();
@@ -659,6 +696,64 @@ impl Parser {
         let e = self.parse_expr()?;
         self.expect_punct(";")?;
         Ok(Stmt::Expr(e))
+    }
+
+    fn parse_switch(&mut self) -> PResult<Stmt> {
+        self.advance(); // consume 'switch'
+        self.expect_punct("(")?;
+        let expr = self.parse_expr()?;
+        self.expect_punct(")")?;
+        self.expect_punct("{")?;
+        let mut cases: Vec<SwitchCase> = Vec::new();
+        while !self.is_punct("}") {
+            if matches!(self.peek(), Tok::Eof) {
+                return Err(format!("satır {}: switch gövdesi kapatılmadı", self.line()));
+            }
+            // Parse case or default label
+            let value: Option<i64>;
+            if self.ident_is("case") {
+                self.advance();
+                // Parse the case value (may be negative)
+                let neg = self.eat_punct("-");
+                let v = match self.advance() {
+                    Tok::Int(n) => n,
+                    Tok::Char(n) => n,
+                    other => {
+                        return Err(format!(
+                            "satır {}: case değeri tam sayı olmalı, bulunan: {:?}",
+                            self.line(),
+                            other
+                        ))
+                    }
+                };
+                let v = if neg { -v } else { v };
+                value = Some(v);
+                self.expect_punct(":")?;
+            } else if self.ident_is("default") {
+                self.advance();
+                self.expect_punct(":")?;
+                value = None;
+            } else {
+                return Err(format!(
+                    "satır {}: switch içinde 'case' veya 'default' bekleniyordu",
+                    self.line()
+                ));
+            }
+            // Collect stmts until next case/default/}
+            let mut body: Vec<Stmt> = Vec::new();
+            while !self.is_punct("}")
+                && !self.ident_is("case")
+                && !self.ident_is("default")
+            {
+                if matches!(self.peek(), Tok::Eof) {
+                    return Err(format!("satır {}: switch gövdesi kapatılmadı", self.line()));
+                }
+                body.push(self.parse_stmt()?);
+            }
+            cases.push(SwitchCase { value, body });
+        }
+        self.expect_punct("}")?;
+        Ok(Stmt::Switch(expr, cases))
     }
 
     fn parse_local_decl(&mut self) -> PResult<Stmt> {

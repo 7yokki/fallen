@@ -1,0 +1,19 @@
+#include <stdio.h>
+int main() {
+    int x = 2;
+    switch (x) {
+        case 1:
+            printf("bir\n");
+            break;
+        case 2:
+            printf("iki\n");
+            break;
+        case 3:
+            printf("uc\n");
+            break;
+        default:
+            printf("diger\n");
+            break;
+    }
+    return 0;
+}

@@ -1,0 +1,10 @@
+class C {
+public:
+    int x;
+};
+
+int main() {
+    C *p;
+    p.x = 1;
+    return 0;
+}

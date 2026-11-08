@@ -1,17 +1,18 @@
 # Fallen
 
-C sözdizimine sahip, Rust seviyesinde bellek güvenliği hedefleyen ve doğrudan x86-64 makine koduna derlenen deneysel bir programlama dili ve derleyicisi.
+C benzeri sözdizimine sahip, dizi sınır kontrolü hedefleyen ve doğrudan x86-64 makine koduna derlenen deneysel bir programlama dili ve derleyicisi. Sürüm: **0.3.0**.
 
 Fallen, `.flen` uzantılı kaynak dosyalarını GNU assembly'ye, oradan da `as` ve `ld` ile doğrudan çalıştırılabilir bir dosyaya dönüştürür. Araya C derleyicisi girmez; `cc` yalnızca `ld` bulunamadığında yedek bağlayıcı olarak kullanılır.
 
 ## Özellikler
 
-- **C ile birebir sözdizimi**: değişkenler, pointer'lar, diziler, fonksiyonlar, kontrol akışı, `#include` ve `#define`.
-- **Bellek güvenliği**: çalışma zamanı dizi sınır kontrolü, otomatik sıfır başlatma, private erişim denetimi ve fork/exec güvenliği.
-- **OOP**: `class`, `private`/`public`, alanlar, metotlar, constructor, `this`, `.` ve `->`, otomatik constructor çağrısı.
+- **C benzeri sözdizimi**: değişkenler, pointer'lar, çok boyutlu diziler, fonksiyonlar/prototipler, kontrol akışı, `switch/case`, `#include` ve `#define`.
+- **Bellek güvenliği**: doğrudan dizi erişimlerinde çalışma zamanı sınır kontrolü, otomatik sıfır başlatma, private/protected erişim denetimi ve fork/exec güvenliği.
+- **OOP**: `class`, `private`/`protected`/`public`, alanlar, metotlar, constructor, `this`, `.` ve `->`, otomatik constructor çağrısı.
 - **Statik bellek analizi**: sınıf boyutları, alan ofsetleri, her fonksiyonun stack çerçevesi ve toplam statik stack rezervi derleme anında hesaplanır.
 - **Doğrudan makine kodu**: `.flen` → x86-64 GNU assembly → `as` → `ld`.
 - **Hızlı derleme**: örnek shell programında derleyici aşamaları yaklaşık 0.5 ms, `as + ld` dahil toplam yaklaşık 20 ms.
+- **Kontroller**: dönüş tipi, fonksiyon argüman sayısı/tipi, atama tipi, tanımsız fonksiyon ve çift tanımlı semboller için derleme zamanı denetimleri.
 
 ## Kurulum
 
@@ -42,6 +43,12 @@ target/release/fallen build dosya.flen -o cikti --stats
 
 # Üretilen assembly dosyasını koru
 target/release/fallen build dosya.flen -o cikti --keep-asm
+
+# Kod üretmeden yalnızca semantik kontrol yap
+target/release/fallen check dosya.flen
+
+# Sürümü göster
+target/release/fallen version
 ```
 
 ### Örnek
@@ -73,24 +80,28 @@ Referans program olarak minimalist, sınıf tabanlı bir shell olan [`examples/s
 
 ## Desteklenen dil kapsamı
 
-- **Tipler**: `void`, `char`, `short`, `int`, `unsigned`, `long`, `unsigned long`, pointer ve sabit boyutlu diziler.
+- **Tipler**: `void`, `char`, `short`, `int`, `unsigned`, `long`, `unsigned long`, pointer, çok boyutlu sabit boyutlu diziler ve dizi parametrelerinde otomatik pointer decay.
 - **Hazır typedef'ler**: `pid_t`, `size_t`, `ssize_t`, `int8_t`...`uint64_t`, `bool`/`_Bool`, `FILE`.
-- **Kontrol akışı**: `if/else`, `while`, `do/while`, `for`, `break`, `continue`, `return`.
+- **Fonksiyonlar**: tanımlar, prototipler, parametreler, dönüş değeri, özyineleme.
+- **Kontrol akışı**: `if/else`, `while`, `do/while`, `for`, `switch/case/default`, `break`, `continue`, `return`.
 - **Operatörler**: atama ve bileşik atama, `++/--`, aritmetik, karşılaştırma, mantıksal, bitwise, shift, ternary, adres ve dereference.
-- **Diğer**: `sizeof`, string/char literalleri, yerel dizi başlatma, global değişkenler, object-like ve function-like makrolar.
-- **Gömülü libc fonksiyonları**: `printf`, `fprintf`, `perror`, `fflush`, `strtok`, `strcmp`, `strcspn`, `memset`, `fgets`, `chdir`, `fork`, `waitpid`, `execvp`, `exit`, `strlen`, `puts`, `putchar`, `getchar`, `malloc`, `calloc`, `free`, `memcpy`, `memcmp`, `atoi`.
+- **Diğer**: `sizeof`, string/char literalleri, onaltılık/ikilik/sekizlik sayılar ve `u`/`l` sonekleri, yerel dizi başlatma, global değişkenler, object-like ve function-like makrolar.
+- **Gömülü libc fonksiyonları**: `printf`, `fprintf`, `perror`, `strtok`, `strcmp`, `strcspn`, `memset`, `fgets`, `fork`, `waitpid`, `execvp`, `strlen`, `malloc`, `calloc`, `free`, `memcpy`, `memcmp`, `atoi` ve daha fazlası.
 - **Gömülü global'ler**: `stdin`, `stdout`, `stderr`.
 
 ### Henüz desteklenmeyenler
 
 - Gerçek `float`/`double` (şu an `int` olarak eşleniyor).
-- `struct`, `union`, `enum`, `typedef`, `switch`, `goto`.
+- `struct`, `union`, `enum`, `typedef`, `goto`.
 - Kalıtım, sanal metotlar, destructor, operatör aşırı yükleme.
 - Fonksiyon pointer'ları.
 - `new`/`delete` ve heap sahiplik analizi (model tamamen statik stack).
 - 6'dan fazla argümanlı çağrılar.
+- Aggregate (dizi/sınıf) dönüş değerleri ve değerle aggregate parametre geçişi.
 - Brace initializer (`int a[3] = {1,2,3};`).
 - Gerçek header ayrıştırma (`#include` satırları atılır).
+- Pointer'a decay olmuş dizilerde sınır bilgisinin korunması; null/sıfıra bölme/alias/ömür analizi.
+- `#if/#ifdef`, `#undef`, `#`/`##` ve çok satırlı makrolar.
 
 ## Mimari
 
@@ -127,7 +138,7 @@ tests/
 ./tests/run.sh
 ```
 
-Testler; temel `printf` ve aritmetiği, OOP'yi, dizi sınır kontrolünü, makroları, ABI dönüş değerlerini ve referans shell programını doğrular.
+Testler; temel `printf` ve aritmetiği, OOP'yi, dizi sınır kontrolünü, makroları, ABI dönüş değerlerini, `switch` (default ortada dahil), çok boyutlu dizileri, dizi parametre decay'ini, prototipleri, sayı soneklerini, tip/argüman/dönüş denetimlerini, erişim kontrollerini ve referans shell programını doğrular. Negatif testler geçersiz programların derlenmediğini kontrol eder.
 
 ## Lisans
 

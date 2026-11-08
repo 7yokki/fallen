@@ -1,6 +1,6 @@
 [package]
 name = "fallen"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 description = "Fallen: C syntax, Rust-grade memory safety, direct-to-machine-code compiler"
 
